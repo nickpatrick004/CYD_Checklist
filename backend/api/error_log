@@ -1,0 +1,1 @@
+[24-Apr-2026 00:15:42 America/New_York] PHP Warning:  mysqli::__construct(): (HY000/1045): Access denied for user 'nickpatr_cyd_user'@'localhost' (using password: YES) in /home/nickpatr/public_html/cyd/api/sync.php on line 21
