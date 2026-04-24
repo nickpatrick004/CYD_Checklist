@@ -1,0 +1,5 @@
+backend/includes/config.php
+backend/error_log
+backend/api/error_log
+*.log
+.DS_Store
