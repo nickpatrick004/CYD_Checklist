@@ -1,4 +1,0 @@
-[24-Apr-2026 00:30:07 America/New_York] PHP Warning:  Use of undefined constant ManagerForBrysonR00m - assumed 'ManagerForBrysonR00m' (this will throw an Error in a future version of PHP) in /home/nickpatr/public_html/cyd/make_password.php on line 3
-[24-Apr-2026 00:30:07 America/New_York] PHP Warning:  password_hash(): Unknown password hashing algorithm: ManagerForBrysonR00m in /home/nickpatr/public_html/cyd/make_password.php on line 3
-[24-Apr-2026 00:30:11 America/New_York] PHP Warning:  Use of undefined constant ManagerForBrysonR00m - assumed 'ManagerForBrysonR00m' (this will throw an Error in a future version of PHP) in /home/nickpatr/public_html/cyd/make_password.php on line 3
-[24-Apr-2026 00:30:11 America/New_York] PHP Warning:  password_hash(): Unknown password hashing algorithm: ManagerForBrysonR00m in /home/nickpatr/public_html/cyd/make_password.php on line 3
