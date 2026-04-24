@@ -308,7 +308,7 @@ void renderScreen(JsonDocument& doc) {
   tft.setTextSize(2);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
   tft.setCursor(5, y);
-  tft.println("Bryson's Checklist");
+  tft.println("CYD Checklist");
 
   y += 22;
 
