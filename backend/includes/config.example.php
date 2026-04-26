@@ -1,5 +1,10 @@
 <?php
+
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'yourcpaneluser_cyd');
-define('DB_USER', 'yourcpaneluser_cyd_user');
-define('DB_PASS', 'your_database_password');
+define('DB_NAME', 'your_db');
+define('DB_USER', 'your_user');
+define('DB_PASS', 'your_password');
+
+define('DEVICE_TOKEN', 'your_device_token');
+
+?>

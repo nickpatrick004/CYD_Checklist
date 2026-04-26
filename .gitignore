@@ -1,5 +1,22 @@
+# ===== Firmware secrets =====
+firmware/cyd_checklist/config.h
+
+# ===== Backend secrets =====
 backend/includes/config.php
-backend/error_log
-backend/api/error_log
+
+# ===== Logs =====
 *.log
+error_log
+
+# ===== macOS junk =====
 .DS_Store
+__MACOSX/
+
+# ===== Arduino build =====
+*.bin
+*.elf
+*.map
+
+# ===== IDE =====
+.vscode/
+.idea/
