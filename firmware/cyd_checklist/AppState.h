@@ -48,12 +48,15 @@ struct AppState {
 
   ChecklistItem checklistItems[MAX_CHECKLIST_ITEMS];
   int checklistCount = 0;
+  int checklistScrollOffset = 0;
 
   AlertItem alertItems[MAX_ALERT_ITEMS];
   int alertItemCount = 0;
 
   MessageItem messageItems[MAX_MESSAGES];
   int messageCount = 0;
+  int messageScrollOffset = 0;
+  int seenMessageCount = 0;
 
   bool alertActive = false;
   int activeAlertItemId = -1;

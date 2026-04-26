@@ -2,6 +2,35 @@
 #include "Display.h"
 #include "Theme.h"
 
+static int clampInt(int value, int low, int high) {
+  if (value < low) return low;
+  if (value > high) return high;
+  return value;
+}
+
+static int unreadMessageCount() {
+  int unread = app.messageCount - app.seenMessageCount;
+  if (unread < 0) unread = 0;
+  if (unread > app.messageCount) unread = app.messageCount;
+  return unread;
+}
+
+static void drawScrollBar(int x, int y, int h, int total, int visible, int offset) {
+  tft.fillRoundRect(x, y, 10, h, 4, C_CARD);
+  tft.drawRoundRect(x, y, 10, h, 4, C_LINE);
+
+  if (total <= visible) {
+    tft.fillRoundRect(x + 2, y + 2, 6, h - 4, 3, C_MUTED);
+    return;
+  }
+
+  int thumbH = max(18, (h - 4) * visible / total);
+  int maxOffset = total - visible;
+  int travel = h - 4 - thumbH;
+  int thumbY = y + 2 + (maxOffset > 0 ? travel * offset / maxOffset : 0);
+  tft.fillRoundRect(x + 2, thumbY, 6, thumbH, 3, C_ORANGE);
+}
+
 void addZone(int id, int x1, int y1, int x2, int y2, const char* action, bool completed) {
   if (app.zoneCount >= MAX_TOUCH_ZONES) return;
   app.zones[app.zoneCount].id = id;
@@ -24,38 +53,88 @@ void drawMainScreen() {
   for (int i = 0; i < app.checklistCount; i++) if (app.checklistItems[i].completed) done++;
   drawProgress(done, app.checklistCount);
 
-  int y = 68;
-  for (int i = 0; i < app.checklistCount && i < 5; i++) {
-    drawChecklistCard(app.checklistItems[i], 8, y, 304, 28);
-    addZone(app.checklistItems[i].id, 8, y, 312, y + 28, "toggle", app.checklistItems[i].completed);
-    y += 32;
+  const int contentTop = 68;
+  const int contentBottom = 202;
+  const int cardX = 8;
+  const int cardW = 288;
+  const int cardH = 28;
+  const int cardGap = 4;
+  const int visibleChecklistItems = 4;
+  const int scrollX = 302;
+  const int scrollY = contentTop;
+  const int scrollH = contentBottom - contentTop;
+
+  int maxOffset = max(0, app.checklistCount - visibleChecklistItems);
+  app.checklistScrollOffset = clampInt(app.checklistScrollOffset, 0, maxOffset);
+
+  int y = contentTop;
+  for (int row = 0; row < visibleChecklistItems; row++) {
+    int i = app.checklistScrollOffset + row;
+    if (i >= app.checklistCount) break;
+    drawChecklistCard(app.checklistItems[i], cardX, y, cardW, cardH);
+    addZone(app.checklistItems[i].id, cardX, y, cardX + cardW, y + cardH, "toggle", app.checklistItems[i].completed);
+    y += cardH + cardGap;
+  }
+
+  if (app.checklistCount == 0) {
+    tft.setTextColor(C_MUTED, C_BG);
+    tft.setTextSize(2);
+    tft.setCursor(24, 106);
+    tft.print("No checklist items");
+  }
+
+  drawScrollBar(scrollX, scrollY, scrollH, app.checklistCount, visibleChecklistItems, app.checklistScrollOffset);
+  if (app.checklistCount > visibleChecklistItems) {
+    addZone(0, scrollX - 6, scrollY, 319, scrollY + scrollH / 2, "chk_up");
+    addZone(0, scrollX - 6, scrollY + scrollH / 2, 319, scrollY + scrollH, "chk_down");
   }
 
   drawFooterButton(8, 208, 98, 24, "SYNC", C_PANEL, C_TEXT);
   addZone(0, 8, 208, 106, 232, "sync");
 
   drawFooterButton(112, 208, 200, 24, "MESSAGES", C_ORANGE, TFT_BLACK);
+  int unread = unreadMessageCount();
+  if (unread > 0) {
+    char badge[12];
+    snprintf(badge, sizeof(badge), "%d NEW", unread);
+    tft.fillRoundRect(254, 211, 52, 18, 6, C_YELLOW);
+    tft.drawRoundRect(254, 211, 52, 18, 6, C_LINE);
+    tft.setTextSize(1);
+    tft.setTextColor(TFT_BLACK, C_YELLOW);
+    tft.setCursor(262, 217);
+    tft.print(badge);
+  }
   addZone(0, 112, 208, 312, 232, "messages");
 }
 
 void drawMessagesScreen() {
   app.zoneCount = 0;
+  app.seenMessageCount = app.messageCount;
   tft.fillScreen(C_BG);
   drawHeader("MESSAGES", "REPLY MODE");
 
-  // Landscape CYD is 320x240. Keep the bottom footer reserved for BACK
-  // so quick-reply buttons can never overlap it.
   const int footerY = 208;
   const int footerH = 24;
   const int replyTopY = 138;
   const int replyH = 24;
   const int replyGapY = 6;
+  const int contentTop = 42;
   const int contentBottom = replyTopY - 6;
+  const int cardX = 8;
+  const int cardW = 288;
+  const int scrollX = 302;
+  const int scrollY = contentTop;
+  const int scrollH = contentBottom - contentTop;
+  const int visibleMessages = 2;
 
-  int y = 42;
-  for (int i = 0; i < app.messageCount && i < 2; i++) {
-    if (y + 38 > contentBottom) break;
-    drawMessageCard(app.messageItems[i], 8, y, 304, 38);
+  int maxOffset = max(0, app.messageCount - visibleMessages);
+  app.messageScrollOffset = clampInt(app.messageScrollOffset, 0, maxOffset);
+
+  int y = contentTop;
+  for (int row = 0; row < visibleMessages; row++) {
+    int i = app.messageScrollOffset + row;
+    if (i >= app.messageCount) break;
+    drawMessageCard(app.messageItems[i], cardX, y, cardW, 38);
     y += 42;
   }
 
@@ -66,9 +145,12 @@ void drawMessagesScreen() {
     tft.print("No messages yet");
   }
 
-  // Quick replies sit in their own two-row area above the footer.
-  // If more than four replies are configured, only the first four are shown
-  // on this small screen to keep touch targets clean.
+  drawScrollBar(scrollX, scrollY, scrollH, app.messageCount, visibleMessages, app.messageScrollOffset);
+  if (app.messageCount > visibleMessages) {
+    addZone(0, scrollX - 6, scrollY, 319, scrollY + scrollH / 2, "msg_up");
+    addZone(0, scrollX - 6, scrollY + scrollH / 2, 319, scrollY + scrollH, "msg_down");
+  }
+
   int visibleReplies = min(quickReplyCount, 4);
   for (int i = 0; i < visibleReplies; i++) {
     int x = (i % 2 == 0) ? 8 : 164;
@@ -77,7 +159,6 @@ void drawMessagesScreen() {
     addZone(i, x, y2, x + 148, y2 + replyH, "reply");
   }
 
-  // Full-width BACK button in the reserved footer. Larger target, no overlap.
   drawFooterButton(8, footerY, 304, footerH, "BACK", C_PANEL, C_TEXT);
   addZone(0, 8, footerY, 312, footerY + footerH, "home");
 }
@@ -148,7 +229,7 @@ void drawMessageCard(const MessageItem& msg, int x, int y, int w, int h) {
   tft.print(":");
   tft.setTextColor(C_TEXT, C_CARD);
   tft.setCursor(x + 8, y + 20);
-  printTrimmedInline(msg.message, 38);
+  printTrimmedInline(msg.message, 36);
 }
 
 void drawFooterButton(int x, int y, int w, int h, const char* label, uint16_t bg, uint16_t fg) {
@@ -184,9 +265,9 @@ void showAlert(int itemId, const char* title) {
   app.activeAlertTitle[sizeof(app.activeAlertTitle) - 1] = '\0';
 
   tft.fillScreen(C_BG);
-  tft.fillRoundRect(10, 16, 300, 150, 12, C_CARD);
-  tft.drawRoundRect(10, 16, 300, 150, 12, C_ORANGE);
-  tft.fillRect(10, 16, 300, 8, C_ORANGE);
+  tft.fillRoundRect(10, 16, 284, 150, 12, C_CARD);
+  tft.drawRoundRect(10, 16, 284, 150, 12, C_ORANGE);
+  tft.fillRect(10, 16, 284, 8, C_ORANGE);
 
   tft.setTextSize(3);
   tft.setTextColor(C_ORANGE, C_CARD);
@@ -196,7 +277,13 @@ void showAlert(int itemId, const char* title) {
   tft.setTextSize(2);
   tft.setTextColor(C_TEXT, C_CARD);
   tft.setCursor(28, 92);
-  printTrimmedInline(app.activeAlertTitle, 22);
+  printTrimmedInline(app.activeAlertTitle, 20);
+
+  // Right-side visual rail keeps the alert content clear of the edge and
+  // matches the messages screen layout.
+  tft.fillRoundRect(302, 22, 10, 138, 4, C_CARD);
+  tft.drawRoundRect(302, 22, 10, 138, 4, C_LINE);
+  tft.fillRoundRect(304, 24, 6, 34, 3, C_ORANGE);
 
   drawFooterButton(20, 180, 125, 44, "DONE", C_GREEN, TFT_BLACK);
   drawFooterButton(175, 180, 130, 44, "SNOOZE", C_YELLOW, TFT_BLACK);

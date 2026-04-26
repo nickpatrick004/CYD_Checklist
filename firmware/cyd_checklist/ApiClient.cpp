@@ -213,4 +213,11 @@ void loadState(JsonDocument& doc) {
     mi.message[sizeof(mi.message) - 1] = '\0';
     app.messageCount++;
   }
+
+  int maxChecklistOffset = max(0, app.checklistCount - 4);
+  if (app.checklistScrollOffset > maxChecklistOffset) app.checklistScrollOffset = maxChecklistOffset;
+
+  int maxMessageOffset = max(0, app.messageCount - 2);
+  if (app.messageScrollOffset > maxMessageOffset) app.messageScrollOffset = maxMessageOffset;
+  if (app.seenMessageCount > app.messageCount) app.seenMessageCount = app.messageCount;
 }

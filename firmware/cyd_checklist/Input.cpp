@@ -47,6 +47,7 @@ void handleAction(const char* action, int id, bool completed) {
 
   if (strcmp(action, "messages") == 0) {
     app.showingMessages = true;
+    app.messageScrollOffset = 0;
     drawMessagesScreen();
     return;
   }
@@ -54,6 +55,32 @@ void handleAction(const char* action, int id, bool completed) {
   if (strcmp(action, "home") == 0) {
     app.showingMessages = false;
     drawMainScreen();
+    return;
+  }
+
+  if (strcmp(action, "chk_up") == 0) {
+    if (app.checklistScrollOffset > 0) app.checklistScrollOffset--;
+    drawMainScreen();
+    return;
+  }
+
+  if (strcmp(action, "chk_down") == 0) {
+    int maxOffset = max(0, app.checklistCount - 4);
+    if (app.checklistScrollOffset < maxOffset) app.checklistScrollOffset++;
+    drawMainScreen();
+    return;
+  }
+
+  if (strcmp(action, "msg_up") == 0) {
+    if (app.messageScrollOffset > 0) app.messageScrollOffset--;
+    drawMessagesScreen();
+    return;
+  }
+
+  if (strcmp(action, "msg_down") == 0) {
+    int maxOffset = max(0, app.messageCount - 2);
+    if (app.messageScrollOffset < maxOffset) app.messageScrollOffset++;
+    drawMessagesScreen();
     return;
   }
 
