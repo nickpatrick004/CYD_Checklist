@@ -20,3 +20,4 @@ __MACOSX/
 # ===== IDE =====
 .vscode/
 .idea/
+firmware/cyd_checklist/config.h
