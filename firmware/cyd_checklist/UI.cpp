@@ -8,11 +8,31 @@ static int clampInt(int value, int low, int high) {
   return value;
 }
 
-static int unreadMessageCount() {
-  int unread = app.messageCount - app.seenMessageCount;
-  if (unread < 0) unread = 0;
-  if (unread > app.messageCount) unread = app.messageCount;
-  return unread;
+static void drawWrappedText(const char* text, int x, int y, int maxCharsPerLine, int maxLines, uint16_t fg, uint16_t bg) {
+  if (!text || strlen(text) == 0) {
+    tft.setTextColor(C_MUTED, bg);
+    tft.setCursor(x, y);
+    tft.print("No details provided.");
+    return;
+  }
+
+  tft.setTextSize(1);
+  tft.setTextColor(fg, bg);
+  int len = strlen(text);
+  int pos = 0;
+  for (int line = 0; line < maxLines && pos < len; line++) {
+    while (pos < len && text[pos] == ' ') pos++;
+    int take = min(maxCharsPerLine, len - pos);
+    int end = pos + take;
+    if (end < len) {
+      int space = -1;
+      for (int i = pos; i < end; i++) if (text[i] == ' ') space = i;
+      if (space > pos + 8) end = space;
+    }
+    tft.setCursor(x, y + line * 13);
+    for (int i = pos; i < end; i++) tft.print(text[i]);
+    pos = end;
+  }
 }
 
 static void drawScrollBar(int x, int y, int h, int total, int visible, int offset) {
@@ -72,7 +92,7 @@ void drawMainScreen() {
     int i = app.checklistScrollOffset + row;
     if (i >= app.checklistCount) break;
     drawChecklistCard(app.checklistItems[i], cardX, y, cardW, cardH);
-    addZone(app.checklistItems[i].id, cardX, y, cardX + cardW, y + cardH, "toggle", app.checklistItems[i].completed);
+    addZone(i, cardX, y, cardX + cardW, y + cardH, "item_detail", app.checklistItems[i].completed);
     y += cardH + cardGap;
   }
 
@@ -93,7 +113,7 @@ void drawMainScreen() {
   addZone(0, 8, 208, 106, 232, "sync");
 
   drawFooterButton(112, 208, 200, 24, "MESSAGES", C_ORANGE, TFT_BLACK);
-  int unread = unreadMessageCount();
+  int unread = app.unreadMessageCount;
   if (unread > 0) {
     char badge[12];
     snprintf(badge, sizeof(badge), "%d NEW", unread);
@@ -109,7 +129,6 @@ void drawMainScreen() {
 
 void drawMessagesScreen() {
   app.zoneCount = 0;
-  app.seenMessageCount = app.messageCount;
   tft.fillScreen(C_BG);
   drawHeader("MESSAGES", "REPLY MODE");
 
@@ -135,6 +154,7 @@ void drawMessagesScreen() {
     int i = app.messageScrollOffset + row;
     if (i >= app.messageCount) break;
     drawMessageCard(app.messageItems[i], cardX, y, cardW, 38);
+    addZone(i, cardX, y, cardX + cardW, y + 38, "message_detail");
     y += 42;
   }
 
@@ -163,6 +183,74 @@ void drawMessagesScreen() {
   addZone(0, 8, footerY, 312, footerY + footerH, "home");
 }
 
+void drawMessageDetailScreen(int index) {
+  if (index < 0 || index >= app.messageCount) return;
+  app.zoneCount = 0;
+  MessageItem& msg = app.messageItems[index];
+  tft.fillScreen(C_BG);
+  drawHeader("MESSAGE DETAIL", msg.isRead ? "READ" : "NEW");
+
+  tft.fillRoundRect(8, 44, 304, 152, 8, C_CARD);
+  tft.drawRoundRect(8, 44, 304, 152, 8, C_LINE);
+  tft.setTextSize(1);
+  tft.setTextColor(C_ORANGE, C_CARD);
+  tft.setCursor(18, 56);
+  tft.print(strcmp(msg.sender, "kid") == 0 ? "Bryson" : msg.sender);
+  tft.setTextColor(C_MUTED, C_CARD);
+  tft.setCursor(18, 70);
+  tft.print(msg.createdAt);
+  tft.setTextColor(C_TEXT, C_CARD);
+  tft.setCursor(18, 88);
+  printTrimmedInline(msg.summary, 40);
+  drawWrappedText(strlen(msg.detail) > 0 ? msg.detail : msg.message, 18, 108, 46, 6, C_TEXT, C_CARD);
+
+  drawFooterButton(8, 208, 304, 24, "BACK TO MESSAGES", C_PANEL, C_TEXT);
+  addZone(0, 8, 208, 312, 232, "messages_back");
+}
+
+void drawChecklistDetailScreen(int index) {
+  if (index < 0 || index >= app.checklistCount) return;
+  app.zoneCount = 0;
+  ChecklistItem& item = app.checklistItems[index];
+  tft.fillScreen(C_BG);
+  drawHeader("ITEM DETAIL", item.completed ? "DONE" : "OPEN");
+
+  tft.fillRoundRect(8, 44, 304, 152, 8, C_CARD);
+  tft.drawRoundRect(8, 44, 304, 152, 8, C_LINE);
+  tft.setTextSize(2);
+  tft.setTextColor(C_TEXT, C_CARD);
+  tft.setCursor(18, 58);
+  printTrimmedInline(item.title, 22);
+  if (strlen(item.dueTime) >= 5) {
+    tft.setTextSize(1);
+    tft.setTextColor(C_MUTED, C_CARD);
+    tft.setCursor(18, 82);
+    tft.print("Due ");
+    tft.print(item.dueTime);
+  }
+  drawWrappedText(item.detail, 18, 104, 46, 6, C_TEXT, C_CARD);
+
+  drawFooterButton(8, 208, 146, 24, item.completed ? "MARK OPEN" : "MARK DONE", item.completed ? C_YELLOW : C_GREEN, TFT_BLACK);
+  addZone(item.id, 8, 208, 154, 232, "toggle", item.completed);
+  drawFooterButton(166, 208, 146, 24, "BACK", C_PANEL, C_TEXT);
+  addZone(0, 166, 208, 312, 232, "home");
+}
+
+void drawAlertDetailScreen() {
+  app.zoneCount = 0;
+  tft.fillScreen(C_BG);
+  drawHeader("ALERT DETAIL", "INSTRUCTION");
+  tft.fillRoundRect(8, 48, 304, 142, 8, C_CARD);
+  tft.drawRoundRect(8, 48, 304, 142, 8, C_ORANGE);
+  tft.setTextSize(2);
+  tft.setTextColor(C_TEXT, C_CARD);
+  tft.setCursor(18, 62);
+  printTrimmedInline(app.activeAlertTitle, 22);
+  drawWrappedText(app.activeAlertDetail, 18, 94, 46, 7, C_TEXT, C_CARD);
+  drawFooterButton(8, 208, 304, 24, "BACK TO ALERT", C_PANEL, C_TEXT);
+  addZone(0, 8, 208, 312, 232, "alert_back");
+}
+
 void drawHeader(const char* title, const char* status) {
   tft.fillRoundRect(0, 0, 320, 34, 0, C_PANEL);
   tft.fillRect(0, 31, 320, 3, C_ORANGE);
@@ -179,10 +267,7 @@ void drawHeader(const char* title, const char* status) {
 }
 
 void drawProgress(int done, int total) {
-  int x = 8;
-  int y = 42;
-  int w = 304;
-  int h = 18;
+  int x = 8, y = 42, w = 304, h = 18;
   tft.fillRoundRect(x, y, w, h, 5, C_CARD);
   int fillW = total > 0 ? (w - 4) * done / total : 0;
   tft.fillRoundRect(x + 2, y + 2, fillW, h - 4, 4, C_ORANGE);
@@ -209,9 +294,13 @@ void drawChecklistCard(const ChecklistItem& item, int x, int y, int w, int h) {
 
   tft.setTextColor(C_TEXT, C_CARD);
   tft.setCursor(x + 38, y + 7);
-  printTrimmedInline(item.title, 18);
-
-  if (strlen(item.dueTime) >= 5) {
+  printTrimmedInline(item.title, strlen(item.detail) > 0 ? 16 : 18);
+  if (strlen(item.detail) > 0) {
+    tft.setTextSize(1);
+    tft.setTextColor(C_ORANGE, C_CARD);
+    tft.setCursor(x + w - 70, y + 10);
+    tft.print("DETAIL");
+  } else if (strlen(item.dueTime) >= 5) {
     tft.setTextSize(1);
     tft.setTextColor(C_MUTED, C_CARD);
     tft.setCursor(x + w - 42, y + 10);
@@ -221,7 +310,8 @@ void drawChecklistCard(const ChecklistItem& item, int x, int y, int w, int h) {
 
 void drawMessageCard(const MessageItem& msg, int x, int y, int w, int h) {
   tft.fillRoundRect(x, y, w, h, 6, C_CARD);
-  tft.drawRoundRect(x, y, w, h, 6, C_LINE);
+  tft.drawRoundRect(x, y, w, h, 6, msg.isRead ? C_LINE : C_ORANGE);
+  if (!msg.isRead && strcmp(msg.sender, "parent") == 0) tft.fillCircle(x + w - 12, y + 10, 4, C_YELLOW);
   tft.setTextSize(1);
   tft.setTextColor(C_ORANGE, C_CARD);
   tft.setCursor(x + 8, y + 6);
@@ -229,7 +319,7 @@ void drawMessageCard(const MessageItem& msg, int x, int y, int w, int h) {
   tft.print(":");
   tft.setTextColor(C_TEXT, C_CARD);
   tft.setCursor(x + 8, y + 20);
-  printTrimmedInline(msg.message, 36);
+  printTrimmedInline(strlen(msg.summary) > 0 ? msg.summary : msg.message, 36);
 }
 
 void drawFooterButton(int x, int y, int w, int h, const char* label, uint16_t bg, uint16_t fg) {
@@ -258,16 +348,20 @@ void drawStatus(const char* line1, const char* line2) {
   }
 }
 
-void showAlert(int itemId, const char* title) {
+void showAlert(int itemId, const char* title, const char* detail) {
   app.alertActive = true;
+  app.showingAlertDetail = false;
   app.activeAlertItemId = itemId;
   strncpy(app.activeAlertTitle, title, sizeof(app.activeAlertTitle) - 1);
   app.activeAlertTitle[sizeof(app.activeAlertTitle) - 1] = '\0';
+  strncpy(app.activeAlertDetail, detail ? detail : "", sizeof(app.activeAlertDetail) - 1);
+  app.activeAlertDetail[sizeof(app.activeAlertDetail) - 1] = '\0';
 
+  app.zoneCount = 0;
   tft.fillScreen(C_BG);
-  tft.fillRoundRect(10, 16, 284, 150, 12, C_CARD);
-  tft.drawRoundRect(10, 16, 284, 150, 12, C_ORANGE);
-  tft.fillRect(10, 16, 284, 8, C_ORANGE);
+  tft.fillRoundRect(10, 16, 300, 150, 12, C_CARD);
+  tft.drawRoundRect(10, 16, 300, 150, 12, C_ORANGE);
+  tft.fillRect(10, 16, 300, 8, C_ORANGE);
 
   tft.setTextSize(3);
   tft.setTextColor(C_ORANGE, C_CARD);
@@ -279,11 +373,10 @@ void showAlert(int itemId, const char* title) {
   tft.setCursor(28, 92);
   printTrimmedInline(app.activeAlertTitle, 20);
 
-  // Right-side visual rail keeps the alert content clear of the edge and
-  // matches the messages screen layout.
-  tft.fillRoundRect(302, 22, 10, 138, 4, C_CARD);
-  tft.drawRoundRect(302, 22, 10, 138, 4, C_LINE);
-  tft.fillRoundRect(304, 24, 6, 34, 3, C_ORANGE);
+  if (strlen(app.activeAlertDetail) > 0) {
+    drawFooterButton(28, 126, 110, 24, "DETAIL", C_PANEL, C_TEXT);
+    addZone(0, 28, 126, 138, 150, "alert_detail");
+  }
 
   drawFooterButton(20, 180, 125, 44, "DONE", C_GREEN, TFT_BLACK);
   drawFooterButton(175, 180, 130, 44, "SNOOZE", C_YELLOW, TFT_BLACK);

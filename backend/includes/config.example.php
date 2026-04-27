@@ -1,10 +1,9 @@
 <?php
+// Copy this file to config.php and fill in real values.
+// Never commit config.php.
 
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'your_db');
-define('DB_USER', 'your_user');
-define('DB_PASS', 'your_password');
-
-define('DEVICE_TOKEN', 'your_device_token');
-
+define('DB_USER', 'your_database_user');
+define('DB_PASS', 'your_database_password');
+define('DB_NAME', 'your_database_name');
 ?>

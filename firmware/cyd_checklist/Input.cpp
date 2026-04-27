@@ -24,7 +24,7 @@ void handleTouch() {
   x = constrain(x, 0, 319);
   y = constrain(y, 0, 239);
 
-  if (app.alertActive) {
+  if (app.alertActive && !app.showingAlertDetail) {
     handleAlertTouch(x, y);
     return;
   }
@@ -45,16 +45,55 @@ void handleAction(const char* action, int id, bool completed) {
     return;
   }
 
+  if (strcmp(action, "item_detail") == 0) {
+    app.showingChecklistDetail = true;
+    app.selectedChecklistIndex = id;
+    app.showingMessages = false;
+    drawChecklistDetailScreen(id);
+    return;
+  }
+
+  if (strcmp(action, "message_detail") == 0) {
+    app.showingMessageDetail = true;
+    app.selectedMessageIndex = id;
+    drawMessageDetailScreen(id);
+    return;
+  }
+
   if (strcmp(action, "messages") == 0) {
     app.showingMessages = true;
+    app.showingMessageDetail = false;
+    app.showingChecklistDetail = false;
     app.messageScrollOffset = 0;
+    app.messagesOpenedAt = millis();
+    app.pendingMarkMessagesRead = true;
+    drawMessagesScreen();
+    return;
+  }
+
+  if (strcmp(action, "messages_back") == 0) {
+    app.showingMessageDetail = false;
+    app.selectedMessageIndex = -1;
     drawMessagesScreen();
     return;
   }
 
   if (strcmp(action, "home") == 0) {
     app.showingMessages = false;
+    app.showingMessageDetail = false;
+    app.showingChecklistDetail = false;
     drawMainScreen();
+    return;
+  }
+
+  if (strcmp(action, "alert_detail") == 0) {
+    app.showingAlertDetail = true;
+    drawAlertDetailScreen();
+    return;
+  }
+
+  if (strcmp(action, "alert_back") == 0) {
+    showAlert(app.activeAlertItemId, app.activeAlertTitle, app.activeAlertDetail);
     return;
   }
 
@@ -96,8 +135,17 @@ void handleAction(const char* action, int id, bool completed) {
 }
 
 void handleAlertTouch(int x, int y) {
+  for (int i = 0; i < app.zoneCount; i++) {
+    TouchZone z = app.zones[i];
+    if (x >= z.x1 && x <= z.x2 && y >= z.y1 && y <= z.y2) {
+      handleAction(z.action, z.id, z.completed);
+      return;
+    }
+  }
+
   if (x >= 20 && x <= 145 && y >= 180 && y <= 224) {
     app.alertActive = false;
+    app.showingAlertDetail = false;
     markItemComplete(app.activeAlertItemId);
     return;
   }
@@ -107,6 +155,7 @@ void handleAlertTouch(int x, int y) {
     app.snoozeUntilMinutes = app.currentMinutes + SNOOZE_MINUTES;
     if (app.snoozeUntilMinutes >= 1440) app.snoozeUntilMinutes -= 1440;
     app.alertActive = false;
+    app.showingAlertDetail = false;
     drawMainScreen();
     return;
   }

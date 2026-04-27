@@ -14,17 +14,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
         $title = trim($_POST['title'] ?? '');
         $dueTime = $_POST['due_time'] ?: null;
+        $detail = trim($_POST['detail'] ?? '');
+        if ($detail === '') $detail = null;
         $repeatDays = trim($_POST['repeat_days'] ?? 'daily');
         $alertEnabled = isset($_POST['alert_enabled']) ? 1 : 0;
 
         if ($title !== '') {
             $stmt = $conn->prepare("
                 INSERT INTO cyd_checklist_items
-                    (device_id, title, due_time, repeat_days, alert_enabled)
+                    (device_id, title, detail_text, due_time, repeat_days, alert_enabled)
                 VALUES
-                    (?, ?, ?, ?, ?)
+                    (?, ?, ?, ?, ?, ?)
             ");
-            $stmt->bind_param("isssi", $deviceId, $title, $dueTime, $repeatDays, $alertEnabled);
+            $stmt->bind_param("issssi", $deviceId, $title, $detail, $dueTime, $repeatDays, $alertEnabled);
             $stmt->execute();
             $stmt->close();
         }
@@ -54,6 +56,7 @@ $stmt = $conn->prepare("
     SELECT
         i.id,
         i.title,
+        i.detail_text,
         i.due_time,
         i.repeat_days,
         i.alert_enabled,
@@ -113,7 +116,7 @@ $conn->close();
             margin: 5px 0;
             font-size: 15px;
         }
-        input[type="text"], input[type="time"], select {
+        input[type="text"], input[type="time"], textarea, select {
             width: 100%;
             box-sizing: border-box;
         }
@@ -166,6 +169,9 @@ $conn->close();
         <label>Title</label>
         <input type="text" name="title" placeholder="Brush teeth" required>
 
+        <label>Detail / instruction text</label>
+        <textarea name="detail" placeholder="Optional details shown when the item or alert is opened."></textarea>
+
         <label>Due Time</label>
         <input type="time" name="due_time">
 
@@ -203,6 +209,7 @@ $conn->close();
             <thead>
                 <tr>
                     <th>Task</th>
+                    <th>Detail</th>
                     <th>Due</th>
                     <th>Repeat</th>
                     <th>Alert</th>
@@ -214,6 +221,7 @@ $conn->close();
                 <?php foreach ($items as $item): ?>
                     <tr>
                         <td><?= htmlspecialchars($item['title']) ?></td>
+                        <td><?= htmlspecialchars($item['detail_text'] ?? '') ?></td>
                         <td><?= htmlspecialchars($item['due_time'] ?? '') ?></td>
                         <td><?= htmlspecialchars($item['repeat_days'] ?? '') ?></td>
                         <td><?= $item['alert_enabled'] ? 'Yes' : 'No' ?></td>

@@ -20,6 +20,7 @@ void setup() {
 
 void loop() {
   handleTouch();
+  serviceDeferredApiWork();
 
   if (!app.alertActive) checkAlerts();
 

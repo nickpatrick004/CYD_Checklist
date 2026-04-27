@@ -7,6 +7,21 @@
 #include "UI.h"
 #include "config.h"
 
+#ifndef SYNC_URL
+#define SYNC_URL API_BASE_URL "/sync.php?token=" DEVICE_TOKEN
+#endif
+#ifndef COMPLETE_URL
+#define COMPLETE_URL API_BASE_URL "/complete_item.php"
+#endif
+#ifndef UNCOMPLETE_URL
+#define UNCOMPLETE_URL API_BASE_URL "/uncomplete_item.php"
+#endif
+#ifndef SEND_MESSAGE_URL
+#define SEND_MESSAGE_URL API_BASE_URL "/send_message.php"
+#endif
+#ifndef MARK_MESSAGES_READ_URL
+#define MARK_MESSAGES_READ_URL API_BASE_URL "/mark_messages_read.php"
+#endif
 
 void updateWiFiStatus() {
   app.wifiConnected = (WiFi.status() == WL_CONNECTED);
@@ -68,6 +83,7 @@ void postItemState(const char* url, int itemId, const char* statusText) {
     app.snoozeUntilMinutes = -1;
   }
 
+  app.showingChecklistDetail = false;
   syncWithServer();
 }
 
@@ -90,6 +106,7 @@ void sendMessage(const char* message) {
   body["token"] = DEVICE_TOKEN;
   body["sender"] = "kid";
   body["message"] = message;
+  body["summary"] = message;
   String json;
   serializeJson(body, json);
 
@@ -101,9 +118,8 @@ void sendMessage(const char* message) {
   Serial.println(httpCode);
   Serial.println(payload);
 
-  if (httpCode == 200) {
-    drawStatus("MESSAGE SENT", message);
-  } else {
+  if (httpCode == 200) drawStatus("MESSAGE SENT", message);
+  else {
     char codeText[16];
     snprintf(codeText, sizeof(codeText), "%d", httpCode);
     drawStatus("SEND FAILED", codeText);
@@ -112,7 +128,53 @@ void sendMessage(const char* message) {
   delay(800);
   syncWithServer();
   app.showingMessages = true;
+  app.showingMessageDetail = false;
   drawMessagesScreen();
+}
+
+void markMessagesRead() {
+  updateWiFiStatus();
+  if (!app.wifiConnected || app.messageCount == 0) return;
+
+  HTTPClient http;
+  http.begin(MARK_MESSAGES_READ_URL);
+  http.addHeader("Content-Type", "application/json");
+
+  StaticJsonDocument<512> body;
+  body["token"] = DEVICE_TOKEN;
+  JsonArray ids = body.createNestedArray("messageIds");
+  for (int i = 0; i < app.messageCount; i++) {
+    if (!app.messageItems[i].isRead && strcmp(app.messageItems[i].sender, "parent") == 0) ids.add(app.messageItems[i].id);
+  }
+
+  if (ids.size() == 0) {
+    http.end();
+    app.pendingMarkMessagesRead = false;
+    return;
+  }
+
+  String json;
+  serializeJson(body, json);
+  int httpCode = http.POST(json);
+  String payload = http.getString();
+  http.end();
+
+  Serial.print("POST mark messages read HTTP: ");
+  Serial.println(httpCode);
+  Serial.println(payload);
+
+  if (httpCode == 200) {
+    for (int i = 0; i < app.messageCount; i++) {
+      if (strcmp(app.messageItems[i].sender, "parent") == 0) app.messageItems[i].isRead = true;
+    }
+    app.unreadMessageCount = 0;
+    app.pendingMarkMessagesRead = false;
+    if (app.showingMessages && !app.showingMessageDetail) drawMessagesScreen();
+  }
+}
+
+void serviceDeferredApiWork() {
+  if (app.pendingMarkMessagesRead && millis() - app.messagesOpenedAt >= MARK_READ_DELAY_MS) markMessagesRead();
 }
 
 void syncWithServer() {
@@ -142,7 +204,7 @@ void syncWithServer() {
   String payload = http.getString();
   http.end();
 
-  StaticJsonDocument<8192> doc;
+  StaticJsonDocument<12288> doc;
   DeserializationError error = deserializeJson(doc, payload);
 
   if (error) {
@@ -162,7 +224,9 @@ void syncWithServer() {
   loadState(doc);
   updateWiFiStatus();
 
-  if (app.showingMessages) drawMessagesScreen();
+  if (app.showingMessageDetail && app.selectedMessageIndex >= 0) drawMessageDetailScreen(app.selectedMessageIndex);
+  else if (app.showingChecklistDetail && app.selectedChecklistIndex >= 0) drawChecklistDetailScreen(app.selectedChecklistIndex);
+  else if (app.showingMessages) drawMessagesScreen();
   else drawMainScreen();
 }
 
@@ -170,6 +234,7 @@ void loadState(JsonDocument& doc) {
   app.checklistCount = 0;
   app.alertItemCount = 0;
   app.messageCount = 0;
+  app.unreadMessageCount = doc["unreadMessageCount"] | 0;
 
   const char* serverTime = doc["serverTime"] | "";
   app.currentMinutes = parseMinutesFromServerTime(serverTime);
@@ -185,6 +250,8 @@ void loadState(JsonDocument& doc) {
     ci.alertEnabled = item["alertEnabled"] | false;
     strncpy(ci.title, item["title"] | "", sizeof(ci.title) - 1);
     ci.title[sizeof(ci.title) - 1] = '\0';
+    strncpy(ci.detail, item["detail"] | "", sizeof(ci.detail) - 1);
+    ci.detail[sizeof(ci.detail) - 1] = '\0';
     strncpy(ci.dueTime, item["dueTime"] | "", sizeof(ci.dueTime) - 1);
     ci.dueTime[sizeof(ci.dueTime) - 1] = '\0';
 
@@ -193,6 +260,8 @@ void loadState(JsonDocument& doc) {
       ai.itemId = ci.id;
       strncpy(ai.title, ci.title, sizeof(ai.title) - 1);
       ai.title[sizeof(ai.title) - 1] = '\0';
+      strncpy(ai.detail, ci.detail, sizeof(ai.detail) - 1);
+      ai.detail[sizeof(ai.detail) - 1] = '\0';
       ai.dueMinutes = timeToMinutes(ci.dueTime);
       ai.completed = ci.completed;
       ai.alertEnabled = ci.alertEnabled;
@@ -207,10 +276,18 @@ void loadState(JsonDocument& doc) {
     if (app.messageCount >= MAX_MESSAGES) break;
 
     MessageItem& mi = app.messageItems[app.messageCount];
+    mi.id = msg["id"] | -1;
+    mi.isRead = msg["isRead"] | false;
     strncpy(mi.sender, msg["sender"] | "", sizeof(mi.sender) - 1);
     mi.sender[sizeof(mi.sender) - 1] = '\0';
+    strncpy(mi.summary, msg["summary"] | msg["message"] | "", sizeof(mi.summary) - 1);
+    mi.summary[sizeof(mi.summary) - 1] = '\0';
     strncpy(mi.message, msg["message"] | "", sizeof(mi.message) - 1);
     mi.message[sizeof(mi.message) - 1] = '\0';
+    strncpy(mi.detail, msg["detail"] | "", sizeof(mi.detail) - 1);
+    mi.detail[sizeof(mi.detail) - 1] = '\0';
+    strncpy(mi.createdAt, msg["createdAt"] | "", sizeof(mi.createdAt) - 1);
+    mi.createdAt[sizeof(mi.createdAt) - 1] = '\0';
     app.messageCount++;
   }
 
@@ -219,5 +296,6 @@ void loadState(JsonDocument& doc) {
 
   int maxMessageOffset = max(0, app.messageCount - 2);
   if (app.messageScrollOffset > maxMessageOffset) app.messageScrollOffset = maxMessageOffset;
-  if (app.seenMessageCount > app.messageCount) app.seenMessageCount = app.messageCount;
+  if (app.selectedMessageIndex >= app.messageCount) app.selectedMessageIndex = -1;
+  if (app.selectedChecklistIndex >= app.checklistCount) app.selectedChecklistIndex = -1;
 }

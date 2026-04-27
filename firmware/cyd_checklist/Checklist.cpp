@@ -27,7 +27,7 @@ void checkAlerts() {
     bool snoozeExpired = app.snoozedItemId == app.alertItems[i].itemId && app.currentMinutes >= app.snoozeUntilMinutes;
 
     if (insideDueWindow || snoozeExpired) {
-      showAlert(app.alertItems[i].itemId, app.alertItems[i].title);
+      showAlert(app.alertItems[i].itemId, app.alertItems[i].title, app.alertItems[i].detail);
       return;
     }
   }
